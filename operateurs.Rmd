@@ -1,0 +1,173 @@
+---
+title: "CPESR"
+author: "CPESR"
+date: "`r Sys.Date()`"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+options(dplyr.summarise.inform = FALSE)
+knitr::opts_chunk$set(fig.asp = 9/16, fig.retina = 2)
+
+library(tidyverse)
+library(ggcpesrthemes)
+theme_set(theme_cpesr())
+theme_cpesr_setup(authors = "Julien Gossa", source = "https://www.budget.gouv.fr/documentation/file-download/27620")
+```
+
+## Données 
+
+- https://www.budget.gouv.fr/documentation/documents-budgetaires/exercice-2025/le-projet-de-loi-de-finances-et-les-documents-annexes-pour-2025/jaunes-budgetaires-2025-plf-2025
+
+```{r load}
+operateurs <- read.csv("operateurs.csv", dec='.') %>%
+  mutate(Valeur = na_if(Valeur,0))
+
+colnames(operateurs)
+```
+
+
+## Explorations
+
+
+```{r}
+operateurs %>%
+  summarise(Rémunérations = sum(Valeur, na.rm = TRUE), .by = Année) %>%
+  ggplot(aes(x=Année,y=Rémunérations)) + 
+  geom_col(fill = "darkblue") +
+  scale_y_continuous(labels = ~ paste(.x/1e3,"M€")) 
+```
+
+
+```{r}
+operateurs %>%
+  summarise(Rémunérations = mean(Valeur, na.rm = TRUE) / 10, .by = Année) %>%
+  ggplot(aes(x=Année,y=Rémunérations)) + 
+  geom_col(fill = "darkblue") +
+  scale_y_continuous(labels = ~ paste(.x,"k€")) +
+  ggtitle("moyenne sur les dix plus importantes rémunérations", subtitle = "brutes, y compris indemnités et parts variables")
+```
+
+
+```{r}
+operateurs %>%
+  summarise(Rémunérations = mean(Valeur, na.rm = TRUE) / 10, .by = c(Année,Statut)) %>%
+  ggplot(aes(x=Année,y=Rémunérations)) + 
+  geom_col(fill = "darkblue") +
+  scale_y_continuous(labels = ~ paste(.x,"k€")) +
+  facet_wrap(~Statut) +
+  ggtitle("moyenne sur les dix plus importantes rémunérations", subtitle = "brutes, y compris indemnités et parts variables")
+```
+
+
+```{r}
+operateurs %>%
+  summarise(Rémunérations = mean(Valeur, na.rm = TRUE) / 10, .by = c(Année,Statut)) %>% 
+  mutate(Evolution = Rémunérations / first(Rémunérations) * 100, .by=Statut) %>% 
+  ggplot(aes(x=Année,y=Evolution,color = Statut)) + 
+  geom_line() + geom_point() +
+  ggtitle("moyenne sur les dix plus importantes rémunérations", subtitle = "brutes, y compris indemnités et parts variables")
+```
+
+```{r}
+operateurs %>%
+  summarise(Rémunérations = mean(Valeur, na.rm = TRUE) / 10, .by = c(Année,Statut)) %>% 
+  mutate(Evolution = Rémunérations / first(Rémunérations) * 100, .by=Statut) %>% 
+  filter(Statut != "GIP") %>%
+  ggplot(aes(x=Année,y=Evolution,color = Statut)) + 
+  geom_line() + geom_point() +
+  ggtitle("moyenne sur les dix plus importantes rémunérations", subtitle = "brutes, y compris indemnités et parts variables")
+```
+
+
+```{r}
+operateurs %>%
+  filter(Année == 2023) %>%
+  arrange(desc(Valeur)) %>%
+  head(10) %>%
+  ggplot(aes(x=Valeur,y=reorder(Opérateur,Valeur))) + 
+  geom_col(fill="DarkBlue") +
+  geom_text(aes(label=paste(format(Valeur/1e3,digits=3),"M€")), color="white", hjust="right", nudge_x = -50) +
+  scale_x_continuous(labels = ~ paste(.x/1e3,"M€"),name="Somme des 10 plus importantes rémunérations") +
+  scale_y_discrete(labels = ~ str_wrap(str_to_sentence(.x),40),name="") +
+  ggtitle("Top 10 des opérateurs les plus généreux (avec leurs dirigeants) - 2023", subtitle = "somme des dix plus importantes rémunérations brutes, y compris indemnités et parts variables") +
+  cpesr_cap() + 
+  theme(plot.title = element_text(hjust = 1), plot.subtitle = element_text(hjust = 1))
+```
+
+```{r}
+operateurs %>%
+  filter(Année == 2023) %>%
+  summarise(Valeur = mean(Valeur,na.rm = TRUE), .by = Statut) %>%
+  ggplot(aes(x=Valeur,y=reorder(Statut,Valeur))) + 
+  geom_col(fill="DarkBlue") +
+  geom_text(aes(label=paste(format(Valeur/1e3,digits=2),"M€")), color="white", hjust="right", nudge_x = -50) +  
+  scale_x_continuous(labels = ~ paste(.x/1e3,"M€"),name="Somme des 10 plus importantes rémunérations") +
+  scale_y_discrete(labels = ~ str_wrap((.x),40),name="") +
+  ggtitle("Moyenne par statut des opérateurs - 2023", subtitle = "somme des dix plus importantes rémunérations brutes, y compris indemnités et parts variables") +
+  cpesr_cap() + 
+  theme(plot.title = element_text(hjust = 1), plot.subtitle = element_text(hjust = 1))
+```
+
+
+```{r}
+operateurs %>%
+  summarise(Valeur = mean(Valeur,na.rm = TRUE), .by = c(Statut,Année)) %>%
+  summarise(Différence = (last(Valeur) - first(Valeur)) / first(Valeur), .by = c(Statut)) %>%
+  ggplot(aes(x=Différence,y=reorder(Statut,Différence))) + 
+  geom_col(fill="Blue") +
+  scale_x_continuous(labels = scales::percent, name="Evolution de la somme des 10 plus importantes rémunérations") +
+  scale_y_discrete(labels = ~ str_wrap((.x),40),name="") +
+  ggtitle("Evolution de la moyenne par statut des opérateurs - entre 2021 et 2023", subtitle = "somme des dix plus importantes rémunérations brutes, y compris indemnités et parts variables") +
+  cpesr_cap() + 
+  theme(plot.title = element_text(hjust = 1), plot.subtitle = element_text(hjust = 1))
+```
+
+
+```{r}
+operateurs %>%
+  filter(Année == 2023,Statut=="EPSCP") %>%
+  arrange(desc(Valeur)) %>%
+  head(10) %>%
+  ggplot(aes(x=Valeur,y=reorder(Opérateur,Valeur))) + 
+  geom_col(fill="DarkBlue") +
+  geom_text(aes(label=paste(format(Valeur/1e3,digits=3),"M€")), color="white", hjust="right", nudge_x = -50) +
+  scale_x_continuous(labels = ~ paste(.x/1e3,"M€"),name="Somme des 10 plus importantes rémunérations") +
+  scale_y_discrete(labels = ~ str_wrap(str_to_sentence(.x),40),name="") +
+  ggtitle("Top 10 des EPSCP les plus généreux (avec leurs dirigeants) - 2023", subtitle = "somme des dix plus importantes rémunérations brutes, y compris indemnités et parts variables") +
+  cpesr_cap() + 
+  theme(plot.title = element_text(hjust = 1), plot.subtitle = element_text(hjust = 1))
+```
+
+```{r, fig.asp=4/2}
+operateurs %>%
+  filter(Année == 2023,Statut=="EPSCP") %>%
+  filter(str_detect(str_to_lower(Opérateur),"universite")) %>%
+  arrange(desc(Valeur)) %>%
+  ggplot(aes(x=Valeur,y=reorder(Opérateur,Valeur))) + 
+  geom_col(fill="DarkBlue") +
+  geom_text(aes(label=paste(format(Valeur/1e3,digits=2),"M€")), color="white", hjust="right", nudge_x = -50) +
+  scale_x_continuous(labels = ~ paste(.x/1e3,"M€"),name="Somme des 10 plus importantes rémunérations") +
+  scale_y_discrete(labels = ~ str_wrap(str_to_sentence(.x),50),name="") +
+  ggtitle("Les universités les plus généreuses (avec leurs dirigeants) - 2023", subtitle = "somme des dix plus importantes rémunérations brutes, y compris indemnités et parts variables") +
+  cpesr_cap() + 
+  theme(plot.title = element_text(hjust = 1), plot.subtitle = element_text(hjust = 1))
+```
+
+
+```{r}
+operateurs %>%
+  filter(Statut=="EPSCP") %>%
+  filter(str_detect(str_to_lower(Opérateur),"universite")) %>%
+  summarise(Différence = (last(Valeur) - first(Valeur)) / first(Valeur), .by = c(Opérateur)) %>%
+  arrange(desc(Différence)) %>%
+  head(10) %>%
+  ggplot(aes(x=Différence,y=reorder(Opérateur,Différence))) + 
+  geom_col(fill="Blue") +
+  scale_x_continuous(labels = scales::percent, name="Evolution de la somme des 10 plus importantes rémunérations") +
+  scale_y_discrete(labels = ~ str_wrap(str_to_sentence(.x),50),name="") +
+  ggtitle("Evolution de la moyenne par statut des universités - entre 2021 et 2023", subtitle = "somme des dix plus importantes rémunérations brutes, y compris indemnités et parts variables") +
+  cpesr_cap() + 
+  theme(plot.title = element_text(hjust = 1), plot.subtitle = element_text(hjust = 1))
+```
